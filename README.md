@@ -27,7 +27,8 @@ With the provided dtb we can successfully boot into armbian, great. But wait... 
 
 ## 2.DTS:
 
-Welcome to the world of dts/dtb and the simple example of frankenboards. 
+Welcome to the world of dts/dtb and the simple example of frankenboards. The good news first, the clock-generators and power-supply-points are usually correct... for the most part as it is basically a cut-down S905W which is a cut down version of the S905X! 
+
 The ethernet works but all other pointers and values to wifi, storage and graphics are not correct. 
 
 So let's take our first problem, the storage. 
@@ -54,10 +55,11 @@ In the original dtb the emmc had max-frequency of 200Mhz via "mmc-hs200-1_8v" an
 
 
 Let's turn the dtb into a workable format with dtc: 
+```
 dtc -I dtb -O dts -o my-test.dts meson-gxlx-s905l-p271.dtb
 
 nano/vim/whatevereditoryoulike my-test.dts
-
+```
 I adjusted my values to the following: 
 
 ```
@@ -86,12 +88,13 @@ mmc@74000 {
 
 
 Looks a bit much in the beginning but important are the following: 
-[Reference for mmci-values](https://www.kernel.org/doc/Documentation/devicetree/bindings/mmc/mmci.txt) (example what some values mean)
+[Reference for mmci-values](https://www.kernel.org/doc/Documentation/devicetree/bindings/mmc/mmci.txt) 
 max-frequency: in this picture set to 25Mhz (in hex) as the lowest standard, just for initial testing. 
 
 phandle: Very important as a pointer within the device trees. It is the unique identifier for devices. Great example, where is the emmc getting it's power from? vmmc-supply <0x2d> which corresponds to: 
 
-```	regulator-vcc-3v3 {
+```
+regulator-vcc-3v3 {
 		compatible = "regulator-fixed";
 		regulator-name = "VCC_3V3";
 		regulator-min-microvolt = <0x325aa0>;
