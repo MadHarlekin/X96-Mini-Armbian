@@ -1,2 +1,117 @@
-# X96-Mini-Armbian
-Journaling my dive into dtb on cheap arm devices! 
+Attempts to run current Linux-Kernels via Armbian/CoreELEC/LibreELEC on old TV set top boxes. 
+
+The X96-Mini i found in a 4-pack for 15€ on ebay. According to the datasheet each box comes with Quad-Core A53, a small Mali-GPU, 2GB Ram and 16Gb emmc. Enough for some fun little testing. 
+
+Inital tests didn't work due to the first finding: 
+
+1. Rebrands, Lies and NANDs: 
+
+CPU
+
+
+The provided dtb-files will not work e.g. S905X-p281.dtb as this is not a S905W but a 905L3 which can use the S905L-p271.dtb. 
+From what i gathered, the supplier edged a wrong name on the chip on purpose to save money, as the L-Variant has  less capabilities. 
+
+MB
+
+The emmc is in fact a SK-Hynix SK Hynix H26M/H26M52103FMR https://www.alldatasheet.net/datasheet-pdf/view/1425081/HYNIX/H26M52001FMR.html but that will only come in handy later. 
+
+With the provided dtb we can successfully boot into armbian, great! But wait... where is everything? No HDMI, no emmc.... no wifi? 
+
+Welcome to the world of dts/dtb and the simple example of emmc: 
+
+So in armbian we can check what the OS knows about the emmc: 
+
+dmesg | grep -i mmc 
+
+Which in my cased revealed: 
+
+`[ 10.123456] mmc1: mmc_select_hs200 failed, error -84 [ 10.123500] mmc1: error -84 whilst initialising eMMC card [ 10.150000] mmcblk1: error -5 sending status command, retrying [ 10.160000] mmcblk1: error -5 sending stop command, original command response 0x900, card status 0x900 [ 10.170000] blk_update_request: I/O error, dev mmcblk1, sector 2048 [ 10.180000] Aborting journal on device mmcblk1p2-8. 
+
+So CRC and I/O-Error and a final timeout. The chip is not happy with the status quo. 
+
+The solution was to fingerprint (see the emmc-chip datasheet) and adjust/force certain points in the device blob tree. 
+
+In the original dtb the emmc had max-frequency of 200Mhz via "mmc-hs200-1_8v" and usage of 1.8V. Because those boards aren't too great in quality sometimes, lowering values or disabeling certain modes. 
+
+
+Let's turn the dtb into a workable format with dtc: 
+dtc -I dtb -O dts -o my-test.dts meson-gxlx-s905l-p271.dtb
+
+nano/vim/whatevereditoryoulike my-test.dts
+
+i adjusted my values to the following: 
+`			mmc@74000 {
+				compatible = "amlogic,meson-gx-mmc", "amlogic,meson-gxbb-mmc";
+				reg = <0x00 0x74000 0x00 0x800>;
+				interrupts = <0x00 0xda 0x04>;
+				status = "okay";
+				clocks = <0x03 0x60 0x03 0x7d 0x03 0x04>;
+				clock-names = "core", "clkin0", "clkin1";
+				resets = <0x11 0x2e>;
+				pinctrl-0 = <0x29>;
+				pinctrl-1 = <0x2b>;
+				pinctrl-names = "default", "clk-gate";
+				bus-width = <0x08>;
+				cap-mmc-highspeed;
+				max-frequency = <0x17d7840>;
+				non-removable;
+				disable-wp;
+				mmc-pwrseq = <0x2c>;
+				vmmc-supply = <0x2d>;
+				vqmmc-supply = <0x25>;
+				phandle = <0xa0>;
+			};`
+
+Looks a bit much in the beginning but important are the following: 
+https://www.kernel.org/doc/Documentation/devicetree/bindings/mmc/mmci.txt (example what some values mean)
+max-frequency: in this picture set to 25Mhz (in hex) as the lowest standard, just for initial testing. 
+
+phandle: Very important as a pointer within the device trees. It is the unique identifier for devices. Great example, where is the emmc getting it's power from? vmmc-supply <0x2d> which corresponds to: 
+
+`	regulator-vcc-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "VCC_3V3";
+		regulator-min-microvolt = <0x325aa0>;
+		regulator-max-microvolt = <0x325aa0>;
+		phandle = <0x2d>;
+	};
+
+	emmc-pwrseq {
+		compatible = "mmc-pwrseq-emmc";
+		reset-gpios = <0x28 0x23 0x01>;
+		phandle = <0x2c>;
+	};`
+
+The 3.3V regulator which has a set voltage and below it is mmc-pwrseq which is also mapped in our EMMC-Device. 
+We turn the modified dts into a dtb. Load it up on the USB and give it a go. 
+So here is now the storage pinned to a 3.3V and 25Mhz frequency on a 8bit-bus: 
+
+`aml-s9xx-box:~:# dmesg | grep -I "mmc"
+[    2.221838] meson-gx-mmc d0074000.mmc: allocated mmc-pwrseq
+[    2.221861] meson-gx-mmc d0070000.mmc: allocated mmc-pwrseq
+[    2.272390] meson-gx-mmc d0070000.mmc: card claims to support voltages below defined range
+[    2.299671] mmc2: new high speed SDIO card at address 0001
+[    2.464858] mmc1: new high speed MMC card at address 0001
+[    2.466329] mmcblk1: mmc1:0001 HAG2e\x05 14.7 GiB
+[    2.472143]  mmcblk1: p1 p2
+[    2.473712] mmcblk1boot0: mmc1:0001 HAG2e\x05 4.00 MiB
+[    2.481654] mmcblk1boot1: mmc1:0001 HAG2e\x05 4.00 MiB
+[    2.485971] mmcblk1rpmb: mmc1:0001 HAG2e\x05 4.00 MiB, chardev (240:0)`
+
+
+great, the OS finally has onboard storage! But how fast is it you may ask: 
+
+`aml-s9xx-box:~:# sudo hdparm -tT /dev/mmcblk1
+
+/dev/mmcblk1:
+ Timing cached reads:   1524 MB in  2.00 seconds = 761.77 MB/sec
+ Timing buffered disk reads:  68 MB in  3.05 seconds =  22.28 MB/sec (this is the value we care for)
+`
+
+Not great but usable for a start. 
+
+ARMBIAN
+
+
+To be continued as I still need to dig further into the VPU/GPU/HDMI even if it is only a "nice to have". 
