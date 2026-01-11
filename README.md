@@ -1,13 +1,12 @@
-Attempts to run current Linux-Kernels via Armbian/CoreELEC/LibreELEC on old TV set top boxes. 
 
 Maybe you are like me and like to play with random hardware and wonder how far you can get it. 
 
-The X96-Mini i found in a 4-pack for 15€ on ebay. According to the datasheet each box comes with Quad-Core A53, a small Mali-GPU, 2GB Ram and 16Gb emmc. Enough for some fun little testing. 
+The X96-Mini i found in a 4-pack for 15€ on ebay. According to the datasheet each box comes with Quad-Core A53, a small Mali-GPU, 2GB Ram and 16Gb emmc. Enough for some fun little testing like a docker swarm or similar.  
 
 I used Armbian and it's flashing tool to get a current image installed on a usb. As it is community driven there is a bit of extra work to do: 
 1. Find the right dtb (device tree blob) and link it in the extlinux.conf fdt-section
 2. Rename the correct binary to "u-boot.ext"
-3. Hope that it boots
+3. Hope that it boots with the toothpick method!
 Inital tests didn't work due to the first finding: 
 
 ## 1. Rebrands, Lies and NANDs: 
@@ -20,14 +19,14 @@ From what i gathered, the supplier edged a wrong name on the chip on purpose to 
 
 ![MB](https://github.com/MadHarlekin/X96-Mini-Armbian/blob/main/X96-Board.png)
 
-The emmc is in fact a SK-Hynix SK Hynix H26M/H26M52103FMR [Datasheet](https://www.alldatasheet.net/datasheet-pdf/view/1425081/HYNIX/H26M52001FMR.html) but that will only come in handy later. 
+The emmc is in fact a SK Hynix H26M / **H26M52103FMR** [Datasheet](https://www.alldatasheet.net/datasheet-pdf/view/1425081/HYNIX/H26M52001FMR.html) but that will only come in handy later. 
 
 With the provided dtb we can successfully boot into armbian, great. But wait... where is everything? No HDMI, no emmc.... no wifi? Only ethernet and SSH works? 
 
 
 ## 2.DTS:
 
-Welcome to the world of dts/dtb and the simple example of frankenboards. The good news first, the clock-generators and power-supply-points are usually correct... for the most part as it is basically a cut-down S905W which is a cut down version of the S905X! 
+Welcome to the world of dts/dtb and the simple example of "frankenboards". The good news first, the clock-generators and power-supply-points are usually correct... for the most part as it is basically a cut down version of the S905X2/3! 
 
 The ethernet works but all other pointers and values to wifi, storage and graphics are not correct. 
 
@@ -47,14 +46,22 @@ Which in my cased revealed:
 [ 10.170000] blk_update_request: I/O error, dev mmcblk1, sector 2048 
 [ 10.180000] Aborting journal on device mmcblk1p2-8. 
 ```
-So CRC and I/O-Error and a final timeout. The chip is not happy with the status quo. 
+So CRC and I/O-Error and a final timeout. The chip is not happy with the status quo. It isn't broken, something in the communication is not to the liking of the SoC.
 
 The solution was to fingerprint (see the emmc-chip datasheet) and adjust/force certain points in the device blob tree. 
 
 In the original dtb the emmc had max-frequency of 200Mhz via "mmc-hs200-1_8v" and usage of 1.8V. Because those boards aren't too great in quality sometimes, lowering values or disabeling certain modes. 
 
+emmc usually splits itself in: 
+Low: 25-26Mhz
+Middle: 50-52Mhz
+HS200-HS400: 100-200Mhz
 
-Let's turn the dtb into a workable format with dtc: 
+So if the 100Mhz isn't working maybe we can just try to go slower. Let's see if we can adjust that frequency. 
+
+
+
+Let's turn the dtb into a workable format first of all with dtc (device-tree-compiler): 
 ```
 dtc -I dtb -O dts -o my-test.dts meson-gxlx-s905l-p271.dtb
 
@@ -89,6 +96,7 @@ mmc@74000 {
 
 Looks a bit much in the beginning but important are the following: 
 [Reference for mmci-values](https://www.kernel.org/doc/Documentation/devicetree/bindings/mmc/mmci.txt) 
+
 max-frequency: in this picture set to 25Mhz (in hex) as the lowest standard, just for initial testing. 
 
 phandle: Very important as a pointer within the device trees. It is the unique identifier for devices. Great example, where is the emmc getting it's power from? vmmc-supply <0x2d> which corresponds to: 
