@@ -14,7 +14,7 @@ Inital tests didn't work due to the first finding:
 ![CPU](https://github.com/MadHarlekin/X96-Mini-Armbian/blob/main/SOC.png)
 
 
-The provided dtb-files will not work e.g. S905X-p212.dtb (which is usually good guess) or S905W-p281.dtb as this is not a S905W but a 905L3 (the edging on the left side) which can use the S905L-p271.dtb. 
+The provided dtb-files will not work e.g. S905X-p212.dtb (which is usually good guess) or S905W-p281.dtb as this is not a S905W but a 905L3 (the edging on the left side, spoiler it isn't that either) which can use the S905L-p271.dtb. 
 From what i gathered, the supplier edged a wrong name on the chip on purpose to save money, as the L-Variant has  less capabilities than the S905W. 
 
 ![MB](https://github.com/MadHarlekin/X96-Mini-Armbian/blob/main/X96-Board.png)
@@ -50,7 +50,7 @@ So CRC and I/O-Error and a final timeout. The chip is not happy with the status 
 
 The solution was to fingerprint (see the emmc-chip datasheet) and adjust/force certain points in the device blob tree. 
 
-In the original dtb the emmc had max-frequency of 200Mhz via "mmc-hs200-1_8v" and usage of 1.8V. Because those boards aren't too great in quality sometimes, lowering values or disabeling certain modes. 
+In the original dtb the emmc had max-frequency of 100Mhz via "mmc-hs200-1_8v" and usage of 1.8V. Because those boards aren't too great in quality sometimes, lowering values or disabeling certain modes can achieve stability. 
 
 emmc usually splits itself in: 
 Low: 25-26Mhz
@@ -98,7 +98,8 @@ Looks a bit much in the beginning but important are the following:
 [Reference for mmci-values](https://www.kernel.org/doc/Documentation/devicetree/bindings/mmc/mmci.txt) 
 
 max-frequency: in this picture set to 25Mhz (in hex) as the lowest standard, just for initial testing. 
-
+removed mmc-hs200-1_8v as we try to avoid multiple voltages and higher frequencies. 
+added cap-mmc-highspeed for the timings. 
 phandle: Very important as a pointer within the device trees. It is the unique identifier for devices. Great example, where is the emmc getting it's power from? vmmc-supply <0x2d> which corresponds to: 
 
 ```
@@ -136,16 +137,17 @@ aml-s9xx-box:~:# dmesg | grep -I "mmc"
 ```
 
 
-great, the OS finally has onboard storage! But how fast is it you may ask: 
+great, the OS finally has access to onboard storage! But how fast is it you may ask: 
 
-```aml-s9xx-box:~:# sudo hdparm -tT /dev/mmcblk1
+```
+aml-s9xx-box:~:# sudo hdparm -tT /dev/mmcblk1
 
 /dev/mmcblk1:
  Timing cached reads:   1524 MB in  2.00 seconds = 761.77 MB/sec
  Timing buffered disk reads:  68 MB in  3.05 seconds =  22.28 MB/sec (this is the value we care for)
 ```
 
-Not great but usable for a start. 
+Not great but usable for a start. Also we can adjust it later and find a more stable frequency for every day usage. 
 
 ![ARMBIAN](https://github.com/MadHarlekin/X96-Mini-Armbian/blob/main/Armbian.png)
 
@@ -153,3 +155,29 @@ Not great but usable for a start.
 To be continued as I still need to dig further into the VPU/GPU/HDMI even if it is only a "nice to have". 
 
 ## 3. HDMI and embedded systems
+
+First of we need to know what HDMI-Pinout is needed so we need to confirm the Architecture (SM1 or GXLX) before we continue: 
+
+```
+
+cat /proc/cpuinfo
+
+processor : 0
+
+model name : ARMv8 Processor rev 4 (v8l)
+
+BogoMIPS : 48.00
+
+Features : fp asimd evtstrm aes pmull sha1 sha2 crc32 cpuid
+
+CPU implementer : 0x41
+
+CPU architecture: 8
+
+CPU variant : 0x0
+
+CPU part : 0xd03
+
+```
+
+And what do you know, it isn't even the S905L3G it claimed to be, the CPU Part states a A53-Cortex chip and thus is a S905L. One Chip, two lies. 
