@@ -14,7 +14,7 @@ Inital tests didn't work due to the first finding:
 ![CPU](https://github.com/MadHarlekin/X96-Mini-Armbian/blob/main/SOC.png)
 
 
-The provided dtb-files will not work e.g. S905X-p212.dtb (which is usually good guess) or S905W-p281.dtb as this is not a S905W but a 905L3 (the edging on the left side, spoiler it isn't that either kind of) which can use the S905L-p271.dtb. 
+The provided dtb-files will not work e.g. S905X-p212.dtb (which is usually good guess) or S905W-p281.dtb as this is not a S905W but a 905L3 (the edging on the left side, spoiler it isn't what it seems to be at first) which can use the S905L-p271.dtb. 
 From what i gathered, the supplier edged a wrong name on the chip on purpose to save money, as the L-Variant has  less capabilities than the S905W. (Less GPU-Cores and no VP9-Decode)
 
 ![MB](https://github.com/MadHarlekin/X96-Mini-Armbian/blob/main/X96-Board.png)
@@ -67,7 +67,7 @@ dtc -I dtb -O dts -o my-test.dts meson-gxlx-s905l-p271.dtb
 
 nano/vim/whatevereditoryoulike my-test.dts
 ```
-I adjusted my values to the following: 
+I adjusted my values to the following and explain further down what they do, this also only the mmc section within the DTS: 
 
 ```
 mmc@74000 {
@@ -154,7 +154,18 @@ Not great but usable for a start. Also we can adjust it later and find a more st
 
 To be continued as I still need to dig further into the VPU/GPU/HDMI even if it is only a "nice to have". 
 
-## 3. HDMI and embedded systems
+
+## 3. The Ghost in the Cheap Shell
+
+During my tests on all these boxes i kept one of them a bit too long on my network. Who would've thought that cheap android boxes are a danger?!
+So my ISP reported days later that i had in fact a "BadBox2" infected device doing stuff from my home-network, all because i was tunnelvisioned on DTS/DTB.
+
+So first of all what does BadBox2 do? It's preloaded on the OS and on the bootloaders (always clean the partitions on those devices!). Even after reset it reinstalls the moment it has internet. 
+These machines call back home and they have only one objective: MAKE MONEY, Ad-Clicking, Residental Proxy or directly trying to poison your network to catch some creds. 
+https://www.humansecurity.com/company/satori-threat-intelligence/badbox-2-0/
+I respect the hustle but good news after wiping the emmc and managing to install my OS i haven't heard any more abuse messages. I also ran over the bootloader partitions (not /boot but emmcblkpkboot0/1 with my own u-boot images to remove all hooks). 
+
+## 4. HDMI and embedded systems
 
 First of we need to know what HDMI-Pinout is needed so we need to confirm the Architecture (SM1 or GXLX) before we continue: 
 
@@ -180,7 +191,7 @@ CPU part : 0xd03
 
 ```
 
-And what do you know, it isn't even the S905L3G it claimed to be, the CPU Part states a A53-Cortex chip and thus is a S905L(3 Revision perhaps but not Gen)) as the 3 Gen would use a A55 Core and not the A53 (it pulls this info straight from the CPU-Register and not DTB) One Chip, two lies or horrible naming scheme. 
+And what do you know, it is the S905L3G it claimed to be, what makes this bad in a sense of naming scheme as AMlogic has for the S905 Series a Gen and performance differantiation S905X3 would be the highest performance third gen SoC. So it would use a A55 Core and not the A53 (it pulls this info straight from the CPU-Register and not DTB) One Chip, two lies or horrible naming scheme. So S905L3 is a "first"-gen low power version of the S905X. 
 So it's confirmed we have to work with a GXLX/GLX kind of set up that just doesn't to show me funny pictures. 
 It will be a bit of work to figure out how GPU, VPU and HDMI interact here in this weird little chip and how we tell how linux should work with it. 
 
@@ -189,21 +200,27 @@ So far rerouting certain parts didn't initalize the VPU and also attempting to b
 
 But first:
 
-## 4. The Ghost in the Cheap Shell
-
-During my tests on all these boxes i kept one of them a bit too long on my network. Who would've thought that cheap android boxes are a danger?!
-So my ISP reported days later that i had in fact a "BadBox2" infected device doing stuff from my home-network, all because i was tunnelvisioned on DTS/DTB.
-
-So first of all what does BadBox2 do? It's preloaded on the OS and on the bootloaders (always clean the partitions on those devices!). Even after reset it reinstalls the moment it has internet. 
-These machines call back home and they have only one objective: MAKE MONEY, Ad-Clicking, Residental Proxy or directly trying to poison your network to catch some creds. 
-https://www.humansecurity.com/company/satori-threat-intelligence/badbox-2-0/
-I respect the hustle but good news after wiping the emmc and managing to install my OS i haven't heard any more abuse messages. I also ran over the bootloader partitions (not /boot but emmcblkpkboot0/1 with my own u-boot images to remove all hooks). 
-
+ 
 ## 5. How far can we go
 
-So currently my little machines sit in a portainer-agent arrangment and prove that they can handle plenty of tasks, granted 1,5Gb RAM is enough while only using 4-5W for the whole cluster. 
+So currently my little machines sit in a portainer-agent arrangment and prove that they can handle plenty of tasks, granted 1,5Gb RAM is enough while only using 4-5W for the whole cluster. Sadly they have certain limits next to their upsides. They sadly don't have a dedicated crypto-engine which would make them amazing drop-boxes. Without the crypto-engine it will have a penalty for SSH-Connections because it will have to use something like CHACHA20. 
+
+1. They have a funny USB-A (and misuse of the spec) port that allows them to be powered over it (5V and 1A). So it can be dropped in a server-room and be powered over a USB-Port of a server.
+2. It has a Ethernet-Port of 100Mb/s which is more than enough for this task.
+3. A WiFi-Chip that might not be amazing but it is there in this dense footprint
+4. In it's case it has a small footprint of 8cm x 8cm x 2cm with the option to place it behind just about an spot.
+5. The performance is surprisingly good, i got HA running and is only really limited by the RAM.
+
+
 
 But i want more, i want my HDMI to work. Just to learn a bit more now, we have to go deeper, datasheets for AMlogic SoC: 
 
 https://www.scs.stanford.edu/~zyedidia/docs/amlogic/s905x.pdf
 https://dn.odroid.com/S905/DataSheet/S905_Public_Datasheet_V1.1.4.pdf
+
+
+Also a neat trick i learned for the more stubborn devices: Use the USB-Burning-Tool for Amlogic and burn the images from slimboxtv https://slimboxtv.ru/x96-mini-11/
+
+What does it do, how does it help? 
+Sometimes the bootloader on the shipped versions can be annoying because it doesn't like to play nice with linux. These provided versions are usually rather robust and all that is needed is a Windows machine + USB-A to USB-A cable. 
+Furthermore they can help if the way back to Android is on the table, in my eyes still the best place to actually get a image for all these machines. 
