@@ -203,11 +203,11 @@ But first:
  
 ## 5. How far can we go
 
-So currently my little machines sit in a portainer-agent arrangment and prove that they can handle plenty of tasks, granted 1,5Gb RAM is enough while only using 4-5W for the whole cluster. Sadly they have certain limits next to their upsides. They sadly don't have a dedicated crypto-engine which would make them amazing drop-boxes. Without the crypto-engine it will have a penalty for SSH-Connections because it will have to use something like CHACHA20. 
+So currently my little machines sit in a portainer-agent arrangment and prove that they can handle plenty of tasks, granted 1,5Gb RAM is enough while only using 4-5W for the whole cluster. Sadly they have certain limits next to their upsides. They a dedicated crypto-engine which would make them amazing drop-boxes. 
 
 1. They have a funny USB-A (and misuse of the spec) port that allows them to be powered over it (5V and 1A). So it can be dropped in a server-room and be powered over a USB-Port of a server.
 2. It has a Ethernet-Port of 100Mb/s which is more than enough for this task.
-3. A WiFi-Chip that might not be amazing but it is there in this dense footprint
+3. A WiFi-Chip that might not be amazing but it is there in this dense footprint (rtl8189fs)
 4. In it's case it has a small footprint of 8cm x 8cm x 2cm with the option to place it behind just about an spot.
 5. The performance is surprisingly good, i got HA running and is only really limited by the RAM.
 
@@ -217,6 +217,58 @@ But i want more, i want my HDMI to work. Just to learn a bit more now, we have t
 
 https://www.scs.stanford.edu/~zyedidia/docs/amlogic/s905x.pdf
 https://dn.odroid.com/S905/DataSheet/S905_Public_Datasheet_V1.1.4.pdf
+
+UPDATE ON HDMI: It works now with the beta version of armbian starting at 6.18.39 https://github.com/ophub/amlogic-s9xxx-armbian/issues/3604
+https://lore.kernel.org/linux-amlogic/20260718111527.119231-1-zinan@mieulab.com/T/#t
+https://github.com/ChalesYu/extdrv4openwrt/blob/master/aml-doc/S905X/chicken_2A/linux/0001-Newer-Meson-GX-HDMI-patch-for-linux.patch
+Adressing in the DTS changes now and i can confirm it works with the beta build: 
+
+```
+hdmi_tx = "/soc/hdmi-tx@da800000";
+		hdmi_tx_venc_port = "/soc/hdmi-tx@da800000/port@0";
+		hdmi_tx_in = "/soc/hdmi-tx@da800000/port@0/endpoint";
+		hdmi_tx_tmds_port = "/soc/hdmi-tx@da800000/port@1";
+		hdmi_tx_tmds_out = "/soc/hdmi-tx@da800000/port@1/endpoint";
+```
+On the system this now is reporting: 
+```
+armbian:~:# tr '\0' '\n' < /sys/firmware/devicetree/base/soc/hdmi-tx@da800000/compatible
+amlogic,meson-gxlx2-dw-hdmi
+amlogic,meson-gxl-dw-hdmi
+amlogic,meson-gx-dw-hdmi
+armbian:~:# cat /sys/class/drm/card*-HDMI-A-*/status
+connected
+armbian:~:# cat /sys/class/drm/card*-HDMI-A-*/modes
+1920x1200
+1920x1080
+1920x1080
+1920x1080
+1920x1080i
+1920x1080i
+1920x1080i
+1920x1080
+1920x1080i
+1920x1080
+1920x1080
+1600x1200
+1280x1024
+1280x1024
+1152x864
+1280x720
+1280x720
+1280x720
+1280x720
+1024x768
+1024x768
+800x600
+800x600
+720x576
+720x576
+720x480
+720x480
+720x480
+640x480
+```
 
 
 Also a neat trick i learned for the more stubborn devices: Use the USB-Burning-Tool for Amlogic and burn the images from slimboxtv https://slimboxtv.ru/x96-mini-11/
